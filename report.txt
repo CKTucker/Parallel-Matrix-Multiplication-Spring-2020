@@ -1,0 +1,126 @@
+Author: Chris Tucker
+Date 2/4/2020
+Distributed Systems
+
+This code runs without issue when I compile it with gcc version 7.4.0
+Please let me know if there are major compiler issues or segmentation
+faults on your machine and I can maybe just send you the .o file or something.
+
+This program creates 2 matricies A and B with dimensions according to the 
+given arguments and multiplies them together in a serialized way and in 
+a parallel one. The resulting matrix C as well as timing information for 
+the two methods is printed to stdout. 
+
+The machine I'm working on lauches 8 parallel threads for the parallel 
+method. The way I went about parallelizing the matrix multiplication was 
+simply to add the  "#pragma omp parallel for" tag to the outermost for 
+loop of the matrix multiplication. This is the loop that runs through 
+the rows of A and the result matrix C. In effect this means that 
+multiple values (8 in my case) of C in the same collum are being 
+calculated in parallel. The program will then calculate the values in 
+those same rows but in the next collum of C once those have finished. I 
+attempted to draw a diagram of a snapshot of C at some point in the 
+execution.
+
++---------------+
+|c c...........c|
+|c c...........c|
+|. .           .|
+|. .           .|
+|c c...........c|
+|c c...c w 0...0|
+|c c...c w 0...0|
+|c c...c w 0...0|
+|c c...c w 0...0|
+|c c...c w 0...0|
+|c c...c w 0...0|
+|c c...c w 0...0|
+|c c...c w 0...0|
+|0 0...........0|
+|0 0...........0|
+|. .           .|
++---------------+
+
+In this diagrm, the values marked 'c' have been fully computed and will 
+remain in the final matrix. The values marked '0' have not been touched 
+by the algorithm at all, and the values marked 'w' are the ones 
+currently being worked on by the parallel algorithm. when they have 
+finished, the algorithm will move onto the values in those same rows but 
+in the next collum over, until they run out of collums, at which point 
+they will move onto the next set of rows. In reality the thread working 
+on one row may have completed many more collums than another but this is 
+much easier to draw. 
+
+Paralellizing the code in this was sees signifigant speedups when 
+compared to the serialized method. I did a few quick runs with square 
+matricies of various sizes to demonstraite, but the code will also show 
+you the speedup when you run it if you want to run your own tests. The program outputs microseconds but I converted to milliseconds to save space.
+
+       n|  200|   500|   1000|    1500
++-------------------------------------+
+  Serial| 37.3| 599.6| 6694.3| 35048.7
+        |     |      |       |
+Parallel|  9.5| 148.6| 1782.5|  7011.5
+
+This gives us a speed increase factor of about 4 or 5 with the parallel 
+method. It is important to note however that the time complexity of the 
+parallel algorithm is still O(n^3), just like the serialized one. we are 
+efectivly dividing the number of operations by 8, but that doesn't 
+change the time compplexity itself. Of course, we would expect to see a 
+speedup of 8 times with 8 threads, but I suspect the reason it's lower 
+is that not all threads are contributing evenly to the computation. A 
+core with several threads on it will find it harder to contribute cpu 
+time than a core witth only this process, and as there are other things 
+running on my computer, not every core can contribute the same amount.
+
+=====Other Details=====
+I didn't have too many issues when it comes to writing the code itself 
+but there were several roadblocks. The first big issue I had was with my 
+compiler. I use Windows and the version of MinGW I had from the OS 
+course did not work well with OpenMP. Trying to run the hello_omp 
+program you gave us would give a garbbled output like "hhhhehellho...", 
+like the threads were racing eachother to print to stdout. 
+I solved this by setting up an Ubuntu Linux subsystem, which is a native 
+feature to Windows 10, and used gcc instead, so now everything compiles 
+and runs without issue.
+
+At one point I also ran into an issue I spent about an hour trying to 
+debug, which turned out to not be an issue at all. When I was comparing 
+times, the serialized code would run 10-100 times faster than the 
+parallel. The reason for this was that I was using quite small matricies 
+in my initial tests to make sure things were working well. However the 
+parallel method dowsn't  start getting faster until maticies around (100 
+x 100) in size. When woeking with larget matricies, I saw the expected 
+speedup. I have a few theories for why it might not work well with small 
+matricies.
+1) There is a high initial setup time for OpenMP to get the parallel 
+processes going.
+2) Compiler optimizations to the serialized method make computing with 
+smaller matricies much faster, but they start to fall off for higher n.
+3) Similar to 1 as well as why the speedup achived is not a direct 
+factor of the number of cores used. Busier cpu cores will not be able to 
+begin work on the process right away, so the first handfull of 
+calculations are likely not being berformed with the full number of 
+threads.
+
+=======References=====
+I did a lot of googling for basic C stuff I forgot and the like, I 
+didn't save every page I looked at but here all I the ones I directly 
+pulled stuff 
+from.
+
+(Used for manipulating gettimeofday() and the timeval structs)
+https://stackoverflow.com/questions/5362577/c-gettimeofday-for-computing-time
+
+(Used to know how to allocate 2d dynamic VLA's and pass them to a 
+function(I really should have just used double** but I thought this way 
+would make the code cleaner). 4th section of the top response)
+https://stackoverflow.com/questions/3911400/how-to-pass-2d-array-matrix-in-a-function-in-c
+
+(Easiest way I could find to set the seed for srand48)
+https://www.geeksforgeeks.org/rand-and-srand-in-ccpp/
+
+(I couldn't the formula to find the percentage of time passed so I used 
+this as well.)
+https://stackoverflow.com/questions/28403939/how-to-calculate-percentage-improvement-in-response-time-for-performance-testing/28404036
+
